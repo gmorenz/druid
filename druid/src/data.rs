@@ -161,6 +161,7 @@ impl_data_simple!(std::num::NonZeroU128);
 impl_data_simple!(std::num::NonZeroUsize);
 //TODO: remove me!?
 impl_data_simple!(String);
+impl_data_simple!(Vec<u8>);
 
 impl Data for f32 {
     fn same(&self, other: &Self) -> bool {
