@@ -33,6 +33,9 @@ use crate::{scroll_component::*, Data, Rect, Vec2};
 pub struct Scroll<T, W> {
     clip: ClipBox<T, W>,
     scroll_component: ScrollComponent,
+
+    sticky_bottom: bool,
+    stuck_to_bottom: bool,
 }
 
 impl<T, W: Widget<T>> Scroll<T, W> {
@@ -45,7 +48,19 @@ impl<T, W: Widget<T>> Scroll<T, W> {
         Scroll {
             clip: ClipBox::new(child),
             scroll_component: ScrollComponent::new(),
+
+            sticky_bottom: false,
+            stuck_to_bottom: false,
         }
+    }
+
+    /// When the contents of the scrollbox grow bigger, and we are at the
+    /// bottom of the contents, controls whether we follow the contents down
+    /// or stay in our current position.
+    pub fn stick_to_bottom(mut self, sticky: bool) -> Self {
+        self.sticky_bottom = sticky;
+        self.stuck_to_bottom = sticky;
+        self
     }
 
     /// Restrict scrolling to the vertical axis while locking child width.
@@ -86,7 +101,9 @@ impl<T, W: Widget<T>> Scroll<T, W> {
     ///
     /// Returns `true` if the scroll offset has changed.
     pub fn scroll_by(&mut self, delta: Vec2) -> bool {
-        self.clip.pan_by(delta)
+        let changed = self.clip.pan_by(delta);
+        if changed { self.update_stuck_to_bottom() };
+        changed
     }
 
     /// Scroll the minimal distance to show the target rect.
@@ -94,7 +111,16 @@ impl<T, W: Widget<T>> Scroll<T, W> {
     /// If the target region is larger than the viewport, we will display the
     /// portion that fits, prioritizing the portion closest to the origin.
     pub fn scroll_to(&mut self, region: Rect) -> bool {
-        self.clip.pan_to_visible(region)
+        let changed = self.clip.pan_to_visible(region);
+        if changed { self.update_stuck_to_bottom() };
+        changed
+    }
+
+    #[inline]
+    fn update_stuck_to_bottom(&mut self) {
+        if self.sticky_bottom {
+            self.stuck_to_bottom = self.clip.viewport().rect.y1 >= self.clip.content_size().height;
+        }
     }
 }
 
@@ -104,13 +130,21 @@ impl<T: Data, W: Widget<T>> Widget<T> for Scroll<T, W> {
         self.clip.with_port(|port| {
             scroll_component.event(port, ctx, event, env);
         });
-        if !ctx.is_handled() {
-            self.clip.event(ctx, event, data, env);
-        }
+    
+        if ctx.is_handled() {
+            self.update_stuck_to_bottom();
+            return;
+        } 
 
-        self.clip.with_port(|port| {
-            scroll_component.handle_scroll(port, ctx, event, env);
+        self.clip.event(ctx, event, data, env);
+
+        let scroll_handled = self.clip.with_port(|port| {
+            scroll_component.handle_scroll(port, ctx, event, env)
         });
+        
+        if scroll_handled.is_handled() {
+            self.update_stuck_to_bottom();
+        }
     }
 
     fn lifecycle(&mut self, ctx: &mut LifeCycleCtx, event: &LifeCycle, data: &T, env: &Env) {
@@ -130,12 +164,18 @@ impl<T: Data, W: Widget<T>> Widget<T> for Scroll<T, W> {
         log_size_warnings(child_size);
 
         let self_size = bc.constrain(child_size);
+        
         // The new size might have made the current scroll offset invalid. This makes it valid
         // again.
-        let _ = self.scroll_by(Vec2::ZERO);
-        if old_size != self_size {
-            self.scroll_component
-                .reset_scrollbar_fade(|d| ctx.request_timer(d), env);
+        if self.stuck_to_bottom {
+            self.scroll_by(Vec2::new(0.0, 100000.0));
+        }
+        else {
+            let _ = self.scroll_by(Vec2::ZERO);
+            if old_size != self_size {
+                self.scroll_component
+                    .reset_scrollbar_fade(|d| ctx.request_timer(d), env);
+            }
         }
 
         self_size

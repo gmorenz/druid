@@ -255,10 +255,11 @@ impl<T, W: Widget<T>> ClipBox<T, W> {
     /// Allows this `ClipBox`'s viewport rectangle to be modified. The provided callback function
     /// can modify its argument, and when it is done then this `ClipBox` will be modified to have
     /// the new viewport rectangle.
-    pub fn with_port<F: FnOnce(&mut Viewport)>(&mut self, f: F) {
-        f(&mut self.port);
+    pub fn with_port<R, F: FnOnce(&mut Viewport) -> R>(&mut self, f: F) -> R {
+        let ret = f(&mut self.port);
         self.child
             .set_viewport_offset(self.viewport_origin().to_vec2());
+        ret
     }
 }
 

@@ -20,7 +20,7 @@ use std::time::Duration;
 use crate::kurbo::{Point, Rect, Vec2};
 use crate::theme;
 use crate::widget::Viewport;
-use crate::{Env, Event, EventCtx, LifeCycle, LifeCycleCtx, PaintCtx, RenderContext, TimerToken};
+use crate::{Env, Event, EventCtx, Handled, LifeCycle, LifeCycleCtx, PaintCtx, RenderContext, TimerToken};
 
 //TODO: Add this to env
 /// Minimum length for any scrollbar to be when measured on that
@@ -425,16 +425,19 @@ impl ScrollComponent {
         ctx: &mut EventCtx,
         event: &Event,
         env: &Env,
-    ) {
+    ) -> Handled {
         if !ctx.is_handled() {
             if let Event::Wheel(mouse) = event {
                 if port.pan_by(mouse.wheel_delta) {
                     ctx.request_paint();
                     ctx.set_handled();
                     self.reset_scrollbar_fade(|d| ctx.request_timer(d), env);
+                    return Handled::Yes;
                 }
             }
         }
+
+        Handled::No
     }
 
     /// Perform any necessary action prompted by a lifecycle event
